@@ -1073,6 +1073,7 @@ The following `addon.cc` implements AtExit:
 
 ```cpp
 // addon.cc
+#undef NDEBUG
 #include <assert.h>
 #include <stdlib.h>
 #include <node.h>
@@ -1109,10 +1110,10 @@ static void sanity_check(void*) {
 }
 
 void init(Local<Object> exports) {
+  AtExit(sanity_check);
   AtExit(at_exit_cb2, cookie);
   AtExit(at_exit_cb2, cookie);
   AtExit(at_exit_cb1, exports->GetIsolate());
-  AtExit(sanity_check);
 }
 
 NODE_MODULE(addon, init)
@@ -1124,7 +1125,7 @@ Test in JavaScript by running:
 
 ```js
 // test.js
-require('./build/Release/addon');
+const addon = require('./build/Release/addon');
 ```
 
 [Embedder's Guide]: https://github.com/v8/v8/wiki/Embedder's%20Guide

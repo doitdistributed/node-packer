@@ -36,7 +36,6 @@ const Timer = process.binding('timer_wrap').Timer;
 const tls_wrap = process.binding('tls_wrap');
 const TCP = process.binding('tcp_wrap').TCP;
 const Pipe = process.binding('pipe_wrap').Pipe;
-const kDisableRenegotiation = Symbol('disable-renegotiation');
 
 function onhandshakestart() {
   debug('onhandshakestart');
@@ -63,11 +62,6 @@ function onhandshakestart() {
       var err = new Error('TLS session renegotiation attack detected');
       self._emitTLSError(err);
     });
-  }
-
-  if (this[kDisableRenegotiation] && ssl.handshakes > 0) {
-    const err = new Error('TLS session renegotiation disabled for this socket');
-    self._emitTLSError(err);
   }
 }
 
@@ -361,10 +355,6 @@ tls_wrap.TLSWrap.prototype.close = function close(cb) {
     return this._parentWrap.destroy();
   }
   return this._parent.close(done);
-};
-
-TLSSocket.prototype.disableRenegotiation = function disableRenegotiation() {
-  this[kDisableRenegotiation] = true;
 };
 
 TLSSocket.prototype._wrapHandle = function(wrap) {

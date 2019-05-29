@@ -24,7 +24,6 @@
 * [File System](fs.html)
 * [Globals](globals.html)
 * [HTTP](http.html)
-* [HTTP/2](http2.html)
 * [HTTPS](https.html)
 * [Inspector](inspector.html)
 * [Internationalization](intl.html)

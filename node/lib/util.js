@@ -64,6 +64,7 @@ const inspectDefaultOptions = Object.seal({
 
 const numbersOnlyRE = /^\d+$/;
 
+const objectHasOwnProperty = Object.prototype.hasOwnProperty;
 const propertyIsEnumerable = Object.prototype.propertyIsEnumerable;
 const regExpToString = RegExp.prototype.toString;
 const dateToISOString = Date.prototype.toISOString;
@@ -135,17 +136,6 @@ function format(f) {
           if (lastPos < i)
             str += f.slice(lastPos, i);
           str += String(arguments[a++]);
-          break;
-        case 79: // 'O'
-          if (lastPos < i)
-            str += f.slice(lastPos, i);
-          str += inspect(arguments[a++]);
-          break;
-        case 111: // 'o'
-          if (lastPos < i)
-            str += f.slice(lastPos, i);
-          str += inspect(arguments[a++],
-                         { showHidden: true, depth: 4, showProxy: true });
           break;
         case 37: // '%'
           if (lastPos < i)
@@ -682,36 +672,22 @@ function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
   var output = [];
   let visibleLength = 0;
   let index = 0;
-  for (const elem of keys) {
-    if (visibleLength === ctx.maxArrayLength)
-      break;
-    // Symbols might have been added to the keys
-    if (typeof elem !== 'string')
-      continue;
-    const i = +elem;
-    if (index !== i) {
-      // Skip zero and negative numbers as well as non numbers
-      if (i > 0 === false)
-        continue;
-      const emptyItems = i - index;
+  while (index < value.length && visibleLength < ctx.maxArrayLength) {
+    let emptyItems = 0;
+    while (index < value.length && !hasOwnProperty(value, String(index))) {
+      emptyItems++;
+      index++;
+    }
+    if (emptyItems > 0) {
       const ending = emptyItems > 1 ? 's' : '';
       const message = `<${emptyItems} empty item${ending}>`;
       output.push(ctx.stylize(message, 'undefined'));
-      index = i;
-      if (++visibleLength === ctx.maxArrayLength)
-        break;
+    } else {
+      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+                                 String(index), true));
+      index++;
     }
-    output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-                               elem, true));
     visibleLength++;
-    index++;
-  }
-  if (index < value.length && visibleLength !== ctx.maxArrayLength) {
-    const len = value.length - index;
-    const ending = len > 1 ? 's' : '';
-    const message = `<${len} empty item${ending}>`;
-    output.push(ctx.stylize(message, 'undefined'));
-    index = value.length;
   }
   var remaining = value.length - index;
   if (remaining > 0) {
@@ -827,7 +803,7 @@ function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
       str = ctx.stylize('[Setter]', 'special');
     }
   }
-  if (visibleKeys[key] === undefined) {
+  if (!hasOwnProperty(visibleKeys, key)) {
     if (typeof key === 'symbol') {
       name = `[${ctx.stylize(key.toString(), 'symbol')}]`;
     } else {
@@ -1008,6 +984,11 @@ function _extend(target, source) {
   }
   return target;
 }
+
+function hasOwnProperty(obj, prop) {
+  return objectHasOwnProperty.call(obj, prop);
+}
+
 
 // Deprecated old stuff.
 

@@ -59,7 +59,6 @@
 #include "env-inl.h"
 #include "handle_wrap.h"
 #include "http_parser.h"
-#include "nghttp2/nghttp2ver.h"
 #include "req-wrap.h"
 #include "req-wrap-inl.h"
 #include "string_bytes.h"
@@ -232,9 +231,6 @@ std::string config_warning_file;  // NOLINT(runtime/string)
 // Used in node_config.cc to set a constant on process.binding('config')
 // that is used by lib/internal/bootstrap_node.js
 bool config_expose_internals = false;
-
-// Set in node.cc by ParseArgs when --expose-http2 is used.
-bool config_expose_http2 = false;
 
 bool v8_initialized = false;
 
@@ -1285,7 +1281,7 @@ void SetupPromises(const FunctionCallbackInfo<Value>& args) {
 
   env->process_object()->Delete(
       env->context(),
-      FIXED_ONE_BYTE_STRING(isolate, "_setupPromises")).FromJust();
+      FIXED_ONE_BYTE_STRING(args.GetIsolate(), "_setupPromises")).FromJust();
 }
 
 }  // anonymous namespace
@@ -1922,57 +1918,6 @@ static void Abort(const FunctionCallbackInfo<Value>& args) {
   Abort();
 }
 
-// --------- [Enclose.IO Hack start] ---------
-#include <wchar.h>
-extern "C" {
-  #include "enclose_io_prelude.h"
-  #include "enclose_io_common.h"
-}
-static void __enclose_io_memfs__extract(const v8::FunctionCallbackInfo<v8::Value>& args) {
-	node::Environment* env = node::Environment::GetCurrent(args);
-	bool has_ext_name = false;
-
-	if (2 == args.Length() && args[0]->IsString() && args[1]->IsString()) {
-		has_ext_name = true;
-	} else if (1 == args.Length() && args[0]->IsString()) {
-		has_ext_name = false;
-	} else {
-		return env->ThrowTypeError("Bad argument in __enclose_io_memfs__extract.");
-	}
-
-	node::Utf8Value path(args.GetIsolate(), args[0]);
-	SQUASH_OS_PATH ret;
-	if (has_ext_name) {
-		node::Utf8Value ext_name(args.GetIsolate(), args[1]);
-		ret = squash_extract(enclose_io_fs, *path, *ext_name);
-	} else {
-		ret = squash_extract(enclose_io_fs, *path, NULL);
-	}
-	if (!ret) {
-		args.GetReturnValue().Set(false);
-		return;
-	}
-
-#ifdef _WIN32
-	char mbs_buf[(32767+1)*2+1];
-	int length = wcstombs(mbs_buf, ret, sizeof(mbs_buf));
-	v8::MaybeLocal<v8::String> str = v8::String::NewFromUtf8(env->isolate(),
-								 reinterpret_cast<const char*>(mbs_buf),
-								 v8::String::kNormalString,
-								 length);
-#else
-	int length = strlen(ret);
-	v8::MaybeLocal<v8::String> str = v8::String::NewFromUtf8(env->isolate(),
-								 reinterpret_cast<const char*>(ret),
-								 v8::String::kNormalString,
-								 length);
-#endif
-	if (str.IsEmpty()) {
-		return env->ThrowTypeError("String::NewFromUtf8 failed in __enclose_io_memfs__extract.");
-	}
-	args.GetReturnValue().Set(str.ToLocalChecked());
-}
-// --------- [Enclose.IO Hack end] ---------
 
 static void Chdir(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
@@ -3265,10 +3210,6 @@ void SetupProcessObject(Environment* env,
       "modules",
       FIXED_ONE_BYTE_STRING(env->isolate(), node_modules_version));
 
-  READONLY_PROPERTY(versions,
-                    "nghttp2",
-                    FIXED_ONE_BYTE_STRING(env->isolate(), NGHTTP2_VERSION));
-
   // process._promiseRejectEvent
   Local<Object> promiseRejectEvent = Object::New(env->isolate());
   READONLY_DONT_ENUM_PROPERTY(process,
@@ -3317,8 +3258,7 @@ void SetupProcessObject(Environment* env,
   // process.release
   Local<Object> release = Object::New(env->isolate());
   READONLY_PROPERTY(process, "release", release);
-  READONLY_PROPERTY(release, "name",
-                    OneByteString(env->isolate(), NODE_RELEASE));
+  READONLY_PROPERTY(release, "name", OneByteString(env->isolate(), "node"));
 
 // if this is a release build and no explicit base has been set
 // substitute the standard release download URL
@@ -3569,10 +3509,6 @@ void SetupProcessObject(Environment* env,
   env->SetMethod(process, "_setupPromises", SetupPromises);
   env->SetMethod(process, "_setupDomainUse", SetupDomainUse);
 
-  // --------- [Enclose.IO Hack start] ---------
-  env->SetMethod(process, "__enclose_io_memfs__extract", __enclose_io_memfs__extract);
-  // --------- [Enclose.IO Hack end] ---------
-
   // pre-set _events object for faster emit checks
   Local<Object> events_obj = Object::New(env->isolate());
   CHECK(events_obj->SetPrototype(env->context(),
@@ -3712,7 +3648,6 @@ static void PrintHelp() {
          "  --abort-on-uncaught-exception\n"
          "                             aborting instead of exiting causes a\n"
          "                             core file to be generated for analysis\n"
-         "  --expose-http2             enable experimental HTTP2 support\n"
          "  --trace-warnings           show stack traces on process warnings\n"
          "  --redirect-warnings=file\n"
          "                             write warnings to file instead of\n"
@@ -3777,7 +3712,6 @@ static void PrintHelp() {
          "NODE_NO_WARNINGS             set to 1 to silence process warnings\n"
 #if !defined(NODE_WITHOUT_NODE_OPTIONS)
          "NODE_OPTIONS                 set CLI options in the environment\n"
-         "                             via a space-separated list\n"
 #endif
 #ifdef _WIN32
          "NODE_PATH                    ';'-separated list of directories\n"
@@ -3834,7 +3768,6 @@ static void CheckIfAllowedInEnv(const char* exe, bool is_env,
     "--throw-deprecation",
     "--no-warnings",
     "--napi-modules",
-    "--expose-http2",
     "--trace-warnings",
     "--redirect-warnings",
     "--trace-sync-io",
@@ -4032,9 +3965,6 @@ static void ParseArgs(int* argc,
     } else if (strcmp(arg, "--expose-internals") == 0 ||
                strcmp(arg, "--expose_internals") == 0) {
       config_expose_internals = true;
-    } else if (strcmp(arg, "--expose-http2") == 0 ||
-               strcmp(arg, "--expose_http2") == 0) {
-      config_expose_http2 = true;
     } else if (strcmp(arg, "-") == 0) {
       break;
     } else if (strcmp(arg, "--") == 0) {

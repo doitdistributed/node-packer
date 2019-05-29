@@ -20,7 +20,6 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 'use strict';
-if ('osx' === process.env.TRAVIS_OS_NAME) { return; }
 require('../common');
 const assert = require('assert');
 const JSStream = process.binding('js_stream').JSStream;
@@ -299,24 +298,8 @@ assert.strictEqual(
       get: function() { this.push(true); return this.length; }
     }
   );
-  Object.defineProperty(
-    value,
-    '-1',
-    {
-      enumerable: true,
-      value: -1
-    }
-  );
   assert.strictEqual(util.inspect(value),
-                     '[ 1, 2, 3, growingLength: [Getter], \'-1\': -1 ]');
-}
-
-// Array with inherited number properties
-{
-  class CustomArray extends Array {}
-  CustomArray.prototype[5] = 'foo';
-  const arr = new CustomArray(50);
-  assert.strictEqual(util.inspect(arr), 'CustomArray [ <50 empty items> ]');
+                     '[ 1, 2, 3, growingLength: [Getter] ]');
 }
 
 // Function with properties

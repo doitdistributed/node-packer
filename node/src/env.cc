@@ -76,10 +76,6 @@ void Environment::Start(int argc,
       reinterpret_cast<uv_handle_t*>(&idle_check_handle_),
       close_and_finish,
       nullptr);
-  RegisterHandleCleanup(
-      reinterpret_cast<uv_handle_t*>(&destroy_ids_timer_handle_),
-      close_and_finish,
-      nullptr);
 
   if (start_profiler_idle_notifier) {
     StartProfilerIdleNotifier();
@@ -102,6 +98,9 @@ void Environment::CleanupHandles() {
     hc->cb_(this, hc->handle_, hc->arg_);
     delete hc;
   }
+
+  while (handle_cleanup_waiting_ != 0)
+    uv_run(event_loop(), UV_RUN_ONCE);
 
   while (handle_cleanup_waiting_ != 0)
     uv_run(event_loop(), UV_RUN_ONCE);

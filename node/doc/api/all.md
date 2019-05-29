@@ -19,7 +19,6 @@
 @include fs
 @include globals
 @include http
-@include http2
 @include https
 @include inspector
 @include intl

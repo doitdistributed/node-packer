@@ -91,7 +91,11 @@ function createServer(options, connectionListener) {
 // connect(port, [host], [cb])
 // connect(path, [cb]);
 //
-function connect(...args) {
+function connect() {
+  var args = new Array(arguments.length);
+  for (var i = 0; i < arguments.length; i++)
+    args[i] = arguments[i];
+  // TODO(joyeecheung): use destructuring when V8 is fast enough
   var normalized = normalizeArgs(args);
   var options = normalized[0];
   debug('createConnection', normalized);
@@ -944,15 +948,19 @@ function internalConnect(
 }
 
 
-Socket.prototype.connect = function(...args) {
+Socket.prototype.connect = function() {
   let normalized;
   // If passed an array, it's treated as an array of arguments that have
   // already been normalized (so we don't normalize more than once). This has
   // been solved before in https://github.com/nodejs/node/pull/12342, but was
   // reverted as it had unintended side effects.
-  if (Array.isArray(args[0]) && args[0][normalizedArgsSymbol]) {
-    normalized = args[0];
+  if (Array.isArray(arguments[0]) && arguments[0][normalizedArgsSymbol]) {
+    normalized = arguments[0];
   } else {
+    var args = new Array(arguments.length);
+    for (var i = 0; i < arguments.length; i++)
+      args[i] = arguments[i];
+    // TODO(joyeecheung): use destructuring when V8 is fast enough
     normalized = normalizeArgs(args);
   }
   var options = normalized[0];
@@ -1412,7 +1420,11 @@ function listenInCluster(server, address, port, addressType,
 }
 
 
-Server.prototype.listen = function(...args) {
+Server.prototype.listen = function() {
+  var args = new Array(arguments.length);
+  for (var i = 0; i < arguments.length; i++)
+    args[i] = arguments[i];
+  // TODO(joyeecheung): use destructuring when V8 is fast enough
   var normalized = normalizeArgs(args);
   var options = normalized[0];
   var cb = normalized[1];

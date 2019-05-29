@@ -16,12 +16,7 @@ const primValues = {
 const bench = common.createBenchmark(main, {
   prim: Object.keys(primValues),
   n: [1e6],
-  method: [
-    'deepEqual',
-    'deepStrictEqual',
-    'notDeepEqual',
-    'notDeepStrictEqual'
-  ]
+  method: ['strict', 'nonstrict']
 });
 
 function main(conf) {
@@ -29,12 +24,11 @@ function main(conf) {
   const n = +conf.n;
   const actual = prim;
   const expected = prim;
-  const expectedWrong = 'b';
   var i;
 
   // Creates new array to avoid loop invariant code motion
   switch (conf.method) {
-    case 'deepEqual':
+    case 'strict':
       bench.start();
       for (i = 0; i < n; ++i) {
         // eslint-disable-next-line no-restricted-properties
@@ -42,25 +36,10 @@ function main(conf) {
       }
       bench.end(n);
       break;
-    case 'deepStrictEqual':
+    case 'nonstrict':
       bench.start();
       for (i = 0; i < n; ++i) {
         assert.deepStrictEqual([actual], [expected]);
-      }
-      bench.end(n);
-      break;
-    case 'notDeepEqual':
-      bench.start();
-      for (i = 0; i < n; ++i) {
-        // eslint-disable-next-line no-restricted-properties
-        assert.notDeepEqual([actual], [expectedWrong]);
-      }
-      bench.end(n);
-      break;
-    case 'notDeepStrictEqual':
-      bench.start();
-      for (i = 0; i < n; ++i) {
-        assert.notDeepStrictEqual([actual], [expectedWrong]);
       }
       bench.end(n);
       break;

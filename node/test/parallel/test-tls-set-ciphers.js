@@ -36,7 +36,7 @@ const fs = require('fs');
 const options = {
   key: fs.readFileSync(`${common.fixturesDir}/keys/agent2-key.pem`),
   cert: fs.readFileSync(`${common.fixturesDir}/keys/agent2-cert.pem`),
-  ciphers: 'AES256-SHA'
+  ciphers: 'DES-CBC3-SHA'
 };
 
 const reply = 'I AM THE WALRUS'; // something recognizable

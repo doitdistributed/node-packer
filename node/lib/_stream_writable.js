@@ -41,33 +41,19 @@ function nop() {}
 function WritableState(options, stream) {
   options = options || {};
 
-  // Duplex streams are both readable and writable, but share
-  // the same options object.
-  // However, some cases require setting options to different
-  // values for the readable and the writable sides of the duplex stream.
-  // These options can be provided separately as readableXXX and writableXXX.
-  var isDuplex = stream instanceof Stream.Duplex;
-
   // object stream flag to indicate whether or not this stream
   // contains buffers or objects.
   this.objectMode = !!options.objectMode;
 
-  if (isDuplex)
+  if (stream instanceof Stream.Duplex)
     this.objectMode = this.objectMode || !!options.writableObjectMode;
 
   // the point at which write() starts returning false
   // Note: 0 is a valid value, means that we always return false if
   // the entire buffer is not flushed immediately on write()
   var hwm = options.highWaterMark;
-  var writableHwm = options.writableHighWaterMark;
   var defaultHwm = this.objectMode ? 16 : 16 * 1024;
-
-  if (hwm || hwm === 0)
-    this.highWaterMark = hwm;
-  else if (isDuplex && (writableHwm || writableHwm === 0))
-    this.highWaterMark = writableHwm;
-  else
-    this.highWaterMark = defaultHwm;
+  this.highWaterMark = (hwm || hwm === 0) ? hwm : defaultHwm;
 
   // cast to ints.
   this.highWaterMark = Math.floor(this.highWaterMark);

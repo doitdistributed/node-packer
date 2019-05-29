@@ -5,20 +5,23 @@
 const common = require('../common');
 
 const TEST_DURATION = common.platformTimeout(1000);
-let N = 3;
+const N = 3;
+let nbIntervalFired = 0;
 
-const keepOpen =
-  setTimeout(
-    common.mustNotCall('Test timed out. keepOpen was not canceled.'),
-    TEST_DURATION);
+const keepOpen = setTimeout(() => {
+  console.error('[FAIL] Interval fired %d/%d times.', nbIntervalFired, N);
+  throw new Error('Test timed out. keepOpen was not canceled.');
+}, TEST_DURATION);
 
-const timer = setInterval(common.mustCall(() => {
-  if (--N === 0) {
+const timer = setInterval(() => {
+  ++nbIntervalFired;
+  if (nbIntervalFired === N) {
     clearInterval(timer);
-    timer._onTimeout =
-      common.mustNotCall('Unrefd interal fired after being cleared');
+    timer._onTimeout = () => {
+      throw new Error('Unrefd interval fired after being cleared.');
+    };
     clearTimeout(keepOpen);
   }
-}, N), 1);
+}, 1);
 
 timer.unref();

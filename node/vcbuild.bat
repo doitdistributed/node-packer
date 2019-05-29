@@ -48,8 +48,6 @@ set js_test_suites=async-hooks inspector known_issues message parallel sequentia
 set v8_test_options=
 set v8_build_options=
 set "common_test_suites=%js_test_suites% doctool addons addons-napi&set build_addons=1&set build_addons_napi=1"
-set http2_debug=
-set nghttp2_debug=
 
 :next-arg
 if "%1"=="" goto args-done
@@ -109,8 +107,6 @@ if /i "%1"=="enable-vtune"  set enable_vtune_arg=1&goto arg-ok
 if /i "%1"=="dll"           set dll=1&goto arg-ok
 if /i "%1"=="static"           set enable_static=1&goto arg-ok
 if /i "%1"=="no-NODE-OPTIONS"	set no_NODE_OPTIONS=1&goto arg-ok
-if /i "%1"=="debug-http2"   set debug_http2=1&goto arg-ok
-if /i "%1"=="debug-nghttp2" set debug_nghttp2=1&goto arg-ok
 
 echo Error: invalid command line option `%1`.
 exit /b 1
@@ -147,9 +143,6 @@ if defined enable_vtune_arg set configure_flags=%configure_flags% --enable-vtune
 if defined dll set configure_flags=%configure_flags% --shared
 if defined enable_static set configure_flags=%configure_flags% --enable-static
 if defined no_NODE_OPTIONS set configure_flags=%configure_flags% --without-node-options
-
-REM if defined debug_http2 set configure_flags=%configure_flags% --debug-http2
-REM if defined debug_nghttp2 set configure_flags=%configure_flags% --debug-nghttp2
 
 if "%i18n_arg%"=="full-icu" set configure_flags=%configure_flags% --with-intl=full-icu
 if "%i18n_arg%"=="small-icu" set configure_flags=%configure_flags% --with-intl=small-icu
@@ -259,7 +252,7 @@ set "msbcpu=/m:2"
 if "%NUMBER_OF_PROCESSORS%"=="1" set "msbcpu=/m:1"
 set "msbplatform=Win32"
 if "%target_arch%"=="x64" set "msbplatform=x64"
-msbuild node.sln %msbcpu% /t:%target% /p:Configuration=%config% /p:Platform=%msbplatform% /clp:NoSummary;NoItemAndPropertyList;Verbosity=quiet /nologo
+msbuild node.sln %msbcpu% /t:%target% /p:Configuration=%config% /p:Platform=%msbplatform% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 goto exit
 if "%target%" == "Clean" goto exit
 
@@ -341,7 +334,7 @@ if not defined msi goto run
 
 :msibuild
 echo Building node-v%FULLVERSION%-%target_arch%.msi
-msbuild "%~dp0tools\msvs\msi\nodemsi.sln" /m /t:Clean,Build /p:PlatformToolset=%PLATFORM_TOOLSET% /p:GypMsvsVersion=%GYP_MSVS_VERSION% /p:Configuration=%config% /p:Platform=%target_arch% /p:NodeVersion=%NODE_VERSION% /p:FullVersion=%FULLVERSION% /p:DistTypeDir=%DISTTYPEDIR% %noetw_msi_arg% %noperfctr_msi_arg% /clp:NoSummary;NoItemAndPropertyList;Verbosity=quiet /nologo
+msbuild "%~dp0tools\msvs\msi\nodemsi.sln" /m /t:Clean,Build /p:PlatformToolset=%PLATFORM_TOOLSET% /p:GypMsvsVersion=%GYP_MSVS_VERSION% /p:Configuration=%config% /p:Platform=%target_arch% /p:NodeVersion=%NODE_VERSION% /p:FullVersion=%FULLVERSION% /p:DistTypeDir=%DISTTYPEDIR% %noetw_msi_arg% %noperfctr_msi_arg% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 goto exit
 
 if not defined sign goto upload

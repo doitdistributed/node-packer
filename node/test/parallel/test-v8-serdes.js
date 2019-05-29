@@ -1,7 +1,5 @@
 'use strict';
 
-if ('osx' === process.env.TRAVIS_OS_NAME) { return; }
-
 const common = require('../common');
 const assert = require('assert');
 const v8 = require('v8');
@@ -21,11 +19,6 @@ const objects = [
   42,
   circular
 ];
-
-const serializerTypeError =
-  /^TypeError: Class constructor Serializer cannot be invoked without 'new'$/;
-const deserializerTypeError =
-  /^TypeError: Class constructor Deserializer cannot be invoked without 'new'$/;
 
 {
   const ser = new v8.DefaultSerializer();
@@ -140,6 +133,13 @@ const deserializerTypeError =
 }
 
 {
-  assert.throws(v8.Serializer, serializerTypeError);
-  assert.throws(v8.Deserializer, deserializerTypeError);
+  assert.throws(
+    () => { v8.Serializer(); },
+    /^TypeError: Class constructor Serializer cannot be invoked without 'new'$/
+  );
+
+  assert.throws(
+    () => { v8.Deserializer(); },
+    /^TypeError: Class constructor Deserializer cannot be invoked without 'new'$/
+  );
 }

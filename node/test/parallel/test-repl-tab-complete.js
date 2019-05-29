@@ -279,16 +279,6 @@ testMe.complete('require(\'n', common.mustCall(function(error, data) {
     });
   });
 
-  {
-    const path = '../fixtures/repl-folder-extensions/f';
-    testMe.complete(`require('${path}`, common.mustCall((err, data) => {
-      assert.ifError(err);
-      assert.strictEqual(data.length, 2);
-      assert.strictEqual(data[1], path);
-      assert.ok(data[0].includes('../fixtures/repl-folder-extensions/foo.js'));
-    }));
-  }
-
   process.chdir(cwd);
 }
 
@@ -421,7 +411,7 @@ const warningRegEx = new RegExp(
     });
 
     // no `biu`
-    assert.strictEqual(data.includes('ele.biu'), false);
+    assert.strictEqual(data.indexOf('ele.biu'), -1);
   }));
 });
 

@@ -23,6 +23,9 @@
 const common = require('../common');
 const assert = require('assert');
 
+let immediateC;
+let immediateD;
+
 let mainFinished = false;
 
 setImmediate(common.mustCall(function() {
@@ -32,12 +35,17 @@ setImmediate(common.mustCall(function() {
 
 const immediateB = setImmediate(common.mustNotCall());
 
-setImmediate(common.mustCall((...args) => {
-  assert.deepStrictEqual(args, [1, 2, 3]);
-}), 1, 2, 3);
+setImmediate(function(x, y, z) {
+  immediateC = [x, y, z];
+}, 1, 2, 3);
 
-setImmediate(common.mustCall((...args) => {
-  assert.deepStrictEqual(args, [1, 2, 3, 4, 5]);
-}), 1, 2, 3, 4, 5);
+setImmediate(function(x, y, z, a, b) {
+  immediateD = [x, y, z, a, b];
+}, 1, 2, 3, 4, 5);
+
+process.on('exit', function() {
+  assert.deepStrictEqual(immediateC, [1, 2, 3], 'immediateC args should match');
+  assert.deepStrictEqual(immediateD, [1, 2, 3, 4, 5], '5 args should match');
+});
 
 mainFinished = true;

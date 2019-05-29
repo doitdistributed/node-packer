@@ -792,7 +792,7 @@ function complete(line, callback) {
     completeOn = match[1];
     var subdir = match[2] || '';
     filter = match[1];
-    var dir, files, f, name, base, ext, abs, subfiles, s, isDirectory;
+    var dir, files, f, name, base, ext, abs, subfiles, s;
     group = [];
     let paths = [];
 
@@ -821,26 +821,23 @@ function complete(line, callback) {
           // Exclude versioned names that 'npm' installs.
           continue;
         }
-        abs = path.resolve(dir, name);
-        try {
-          isDirectory = fs.statSync(abs).isDirectory();
-        } catch (e) {
-          continue;
-        }
-        if (isDirectory) {
-          group.push(subdir + name + '/');
+        if (exts.indexOf(ext) !== -1) {
+          if (!subdir || base !== 'index') {
+            group.push(subdir + base);
+          }
+        } else {
+          abs = path.resolve(dir, name);
           try {
-            subfiles = fs.readdirSync(abs);
-          } catch (e) {
-            continue;
-          }
-          for (s = 0; s < subfiles.length; s++) {
-            if (indexRe.test(subfiles[s])) {
-              group.push(subdir + name);
+            if (fs.statSync(abs).isDirectory()) {
+              group.push(subdir + name + '/');
+              subfiles = fs.readdirSync(abs);
+              for (s = 0; s < subfiles.length; s++) {
+                if (indexRe.test(subfiles[s])) {
+                  group.push(subdir + name);
+                }
+              }
             }
-          }
-        } else if (exts.includes(ext) && (!subdir || base !== 'index')) {
-          group.push(subdir + base);
+          } catch (e) {}
         }
       }
     }
