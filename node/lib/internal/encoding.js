@@ -3,17 +3,20 @@
 // An implementation of the WHATWG Encoding Standard
 // https://encoding.spec.whatwg.org
 
-const errors = require('internal/errors');
+const { Object } = primordials;
+
+const {
+  ERR_ENCODING_INVALID_ENCODED_DATA,
+  ERR_ENCODING_NOT_SUPPORTED,
+  ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_THIS,
+  ERR_NO_ICU
+} = require('internal/errors').codes;
 const kHandle = Symbol('handle');
 const kFlags = Symbol('flags');
 const kEncoding = Symbol('encoding');
 const kDecoder = Symbol('decoder');
 const kEncoder = Symbol('encoder');
-
-let warned = false;
-const experimental =
-  'The WHATWG Encoding Standard implementation is an experimental API. It ' +
-  'should not yet be used in production applications.';
 
 const {
   getConstructorOf,
@@ -21,18 +24,35 @@ const {
 } = require('internal/util');
 
 const {
-  isArrayBuffer
-} = process.binding('util');
+  isArrayBuffer,
+  isArrayBufferView
+} = require('internal/util/types');
 
 const {
   encodeUtf8String
-} = process.binding('buffer');
+} = internalBinding('buffer');
 
-const {
-  decode: _decode,
-  getConverter,
-  hasConverter
-} = process.binding('icu');
+var Buffer;
+function lazyBuffer() {
+  if (Buffer === undefined)
+    Buffer = require('buffer').Buffer;
+  return Buffer;
+}
+
+function validateEncoder(obj) {
+  if (obj == null || obj[kEncoder] !== true)
+    throw new ERR_INVALID_THIS('TextEncoder');
+}
+
+function validateDecoder(obj) {
+  if (obj == null || obj[kDecoder] !== true)
+    throw new ERR_INVALID_THIS('TextDecoder');
+}
+
+function validateArgument(prop, expected, propName, expectedName) {
+  if (typeof prop !== expected)
+    throw new ERR_INVALID_ARG_TYPE(propName, expectedName, prop);
+}
 
 const CONVERTER_FLAGS_FLUSH = 0x1;
 const CONVERTER_FLAGS_FATAL = 0x2;
@@ -284,165 +304,37 @@ function getEncodingFromLabel(label) {
   return encodings.get(trimAsciiWhitespace(label.toLowerCase()));
 }
 
-function hasTextDecoder(encoding = 'utf-8') {
-  if (typeof encoding !== 'string')
-    throw new errors.Error('ERR_INVALID_ARG_TYPE', 'encoding', 'string');
-  return hasConverter(getEncodingFromLabel(encoding));
-}
-
-var Buffer;
-function lazyBuffer() {
-  if (Buffer === undefined)
-    Buffer = require('buffer').Buffer;
-  return Buffer;
-}
-
-class TextDecoder {
-  constructor(encoding = 'utf-8', options = {}) {
-    if (!warned) {
-      warned = true;
-      process.emitWarning(experimental, 'ExperimentalWarning');
-    }
-
-    encoding = `${encoding}`;
-    if (typeof options !== 'object')
-      throw new errors.Error('ERR_INVALID_ARG_TYPE', 'options', 'object');
-
-    const enc = getEncodingFromLabel(encoding);
-    if (enc === undefined)
-      throw new errors.RangeError('ERR_ENCODING_NOT_SUPPORTED', encoding);
-
-    var flags = 0;
-    if (options !== null) {
-      flags |= options.fatal ? CONVERTER_FLAGS_FATAL : 0;
-      flags |= options.ignoreBOM ? CONVERTER_FLAGS_IGNORE_BOM : 0;
-    }
-
-    const handle = getConverter(enc, flags);
-    if (handle === undefined)
-      throw new errors.Error('ERR_ENCODING_NOT_SUPPORTED', encoding);
-
-    this[kHandle] = handle;
-    this[kFlags] = flags;
-    this[kEncoding] = enc;
-  }
-
-  get encoding() {
-    if (this == null || this[kDecoder] !== true)
-      throw new errors.TypeError('ERR_INVALID_THIS', 'TextDecoder');
-    return this[kEncoding];
-  }
-
-  get fatal() {
-    if (this == null || this[kDecoder] !== true)
-      throw new errors.TypeError('ERR_INVALID_THIS', 'TextDecoder');
-    return (this[kFlags] & CONVERTER_FLAGS_FATAL) === CONVERTER_FLAGS_FATAL;
-  }
-
-  get ignoreBOM() {
-    if (this == null || this[kDecoder] !== true)
-      throw new errors.TypeError('ERR_INVALID_THIS', 'TextDecoder');
-    return (this[kFlags] & CONVERTER_FLAGS_IGNORE_BOM) ===
-           CONVERTER_FLAGS_IGNORE_BOM;
-  }
-
-  decode(input = empty, options = {}) {
-    if (this == null || this[kDecoder] !== true)
-      throw new errors.TypeError('ERR_INVALID_THIS', 'TextDecoder');
-    if (isArrayBuffer(input)) {
-      input = lazyBuffer().from(input);
-    } else if (!ArrayBuffer.isView(input)) {
-      throw new errors.TypeError('ERR_INVALID_ARG_TYPE', 'input',
-                                 ['ArrayBuffer', 'ArrayBufferView']);
-    }
-    if (typeof options !== 'object') {
-      throw new errors.TypeError('ERR_INVALID_ARG_TYPE', 'options', 'object');
-    }
-
-    var flags = 0;
-    if (options !== null)
-      flags |= options.stream ? 0 : CONVERTER_FLAGS_FLUSH;
-
-    const ret = _decode(this[kHandle], input, flags);
-    if (typeof ret === 'number') {
-      const err = new errors.TypeError('ERR_ENCODING_INVALID_ENCODED_DATA',
-                                       this.encoding);
-      err.errno = ret;
-      throw err;
-    }
-    return ret.toString('ucs2');
-  }
-
-  [inspect](depth, opts) {
-    if (this == null || this[kDecoder] !== true)
-      throw new errors.TypeError('ERR_INVALID_THIS', 'TextDecoder');
-    if (typeof depth === 'number' && depth < 0)
-      return opts.stylize('[Object]', 'special');
-    var ctor = getConstructorOf(this);
-    var obj = Object.create({
-      constructor: ctor === null ? TextDecoder : ctor
-    });
-    obj.encoding = this.encoding;
-    obj.fatal = this.fatal;
-    obj.ignoreBOM = this.ignoreBOM;
-    if (opts.showHidden) {
-      obj[kFlags] = this[kFlags];
-      obj[kHandle] = this[kHandle];
-    }
-    // Lazy to avoid circular dependency
-    return require('util').inspect(obj, opts);
-  }
-}
-
 class TextEncoder {
   constructor() {
-    if (!warned) {
-      warned = true;
-      process.emitWarning(experimental, 'ExperimentalWarning');
-    }
+    this[kEncoder] = true;
   }
 
   get encoding() {
-    if (this == null || this[kEncoder] !== true)
-      throw new errors.TypeError('ERR_INVALID_THIS', 'TextEncoder');
+    validateEncoder(this);
     return 'utf-8';
   }
 
   encode(input = '') {
-    if (this == null || this[kEncoder] !== true)
-      throw new errors.TypeError('ERR_INVALID_THIS', 'TextEncoder');
+    validateEncoder(this);
     return encodeUtf8String(`${input}`);
   }
 
   [inspect](depth, opts) {
-    if (this == null || this[kEncoder] !== true)
-      throw new errors.TypeError('ERR_INVALID_THIS', 'TextEncoder');
+    validateEncoder(this);
     if (typeof depth === 'number' && depth < 0)
-      return opts.stylize('[Object]', 'special');
-    var ctor = getConstructorOf(this);
-    var obj = Object.create({
+      return this;
+    const ctor = getConstructorOf(this);
+    const obj = Object.create({
       constructor: ctor === null ? TextEncoder : ctor
     });
     obj.encoding = this.encoding;
     // Lazy to avoid circular dependency
-    return require('util').inspect(obj, opts);
+    return require('internal/util/inspect').inspect(obj, opts);
   }
 }
 
 Object.defineProperties(
-  TextDecoder.prototype, {
-    [kDecoder]: { enumerable: false, value: true, configurable: false },
-    'decode': { enumerable: true },
-    'encoding': { enumerable: true },
-    'fatal': { enumerable: true },
-    'ignoreBOM': { enumerable: true },
-    [Symbol.toStringTag]: {
-      configurable: true,
-      value: 'TextDecoder'
-    } });
-Object.defineProperties(
   TextEncoder.prototype, {
-    [kEncoder]: { enumerable: false, value: true, configurable: false },
     'encode': { enumerable: true },
     'encoding': { enumerable: true },
     [Symbol.toStringTag]: {
@@ -450,9 +342,209 @@ Object.defineProperties(
       value: 'TextEncoder'
     } });
 
+const TextDecoder =
+  internalBinding('config').hasIntl ?
+    makeTextDecoderICU() :
+    makeTextDecoderJS();
+
+function makeTextDecoderICU() {
+  const {
+    decode: _decode,
+    getConverter,
+  } = internalBinding('icu');
+
+  class TextDecoder {
+    constructor(encoding = 'utf-8', options = {}) {
+      encoding = `${encoding}`;
+      validateArgument(options, 'object', 'options', 'Object');
+
+      const enc = getEncodingFromLabel(encoding);
+      if (enc === undefined)
+        throw new ERR_ENCODING_NOT_SUPPORTED(encoding);
+
+      var flags = 0;
+      if (options !== null) {
+        flags |= options.fatal ? CONVERTER_FLAGS_FATAL : 0;
+        flags |= options.ignoreBOM ? CONVERTER_FLAGS_IGNORE_BOM : 0;
+      }
+
+      const handle = getConverter(enc, flags);
+      if (handle === undefined)
+        throw new ERR_ENCODING_NOT_SUPPORTED(encoding);
+
+      this[kDecoder] = true;
+      this[kHandle] = handle;
+      this[kFlags] = flags;
+      this[kEncoding] = enc;
+    }
+
+
+    decode(input = empty, options = {}) {
+      validateDecoder(this);
+      if (isArrayBuffer(input)) {
+        input = lazyBuffer().from(input);
+      } else if (!isArrayBufferView(input)) {
+        throw new ERR_INVALID_ARG_TYPE('input',
+                                       ['ArrayBuffer', 'ArrayBufferView'],
+                                       input);
+      }
+      validateArgument(options, 'object', 'options', 'Object');
+
+      var flags = 0;
+      if (options !== null)
+        flags |= options.stream ? 0 : CONVERTER_FLAGS_FLUSH;
+
+      const ret = _decode(this[kHandle], input, flags);
+      if (typeof ret === 'number') {
+        throw new ERR_ENCODING_INVALID_ENCODED_DATA(this.encoding, ret);
+      }
+      return ret.toString('ucs2');
+    }
+  }
+
+  return TextDecoder;
+}
+
+function makeTextDecoderJS() {
+  var StringDecoder;
+  function lazyStringDecoder() {
+    if (StringDecoder === undefined)
+      ({ StringDecoder } = require('string_decoder'));
+    return StringDecoder;
+  }
+
+  const kBOMSeen = Symbol('BOM seen');
+
+  function hasConverter(encoding) {
+    return encoding === 'utf-8' || encoding === 'utf-16le';
+  }
+
+  class TextDecoder {
+    constructor(encoding = 'utf-8', options = {}) {
+      encoding = `${encoding}`;
+      validateArgument(options, 'object', 'options', 'Object');
+
+      const enc = getEncodingFromLabel(encoding);
+      if (enc === undefined || !hasConverter(enc))
+        throw new ERR_ENCODING_NOT_SUPPORTED(encoding);
+
+      var flags = 0;
+      if (options !== null) {
+        if (options.fatal) {
+          throw new ERR_NO_ICU('"fatal" option');
+        }
+        flags |= options.ignoreBOM ? CONVERTER_FLAGS_IGNORE_BOM : 0;
+      }
+
+      this[kDecoder] = true;
+      // StringDecoder will normalize WHATWG encoding to Node.js encoding.
+      this[kHandle] = new (lazyStringDecoder())(enc);
+      this[kFlags] = flags;
+      this[kEncoding] = enc;
+      this[kBOMSeen] = false;
+    }
+
+    decode(input = empty, options = {}) {
+      validateDecoder(this);
+      if (isArrayBuffer(input)) {
+        input = lazyBuffer().from(input);
+      } else if (isArrayBufferView(input)) {
+        input = lazyBuffer().from(input.buffer, input.byteOffset,
+                                  input.byteLength);
+      } else {
+        throw new ERR_INVALID_ARG_TYPE('input',
+                                       ['ArrayBuffer', 'ArrayBufferView'],
+                                       input);
+      }
+      validateArgument(options, 'object', 'options', 'Object');
+
+      if (this[kFlags] & CONVERTER_FLAGS_FLUSH) {
+        this[kBOMSeen] = false;
+      }
+
+      if (options !== null && options.stream) {
+        this[kFlags] &= ~CONVERTER_FLAGS_FLUSH;
+      } else {
+        this[kFlags] |= CONVERTER_FLAGS_FLUSH;
+      }
+
+      if (!this[kBOMSeen] && !(this[kFlags] & CONVERTER_FLAGS_IGNORE_BOM)) {
+        if (this[kEncoding] === 'utf-8') {
+          if (input.length >= 3 &&
+              input[0] === 0xEF && input[1] === 0xBB && input[2] === 0xBF) {
+            input = input.slice(3);
+          }
+        } else if (this[kEncoding] === 'utf-16le') {
+          if (input.length >= 2 && input[0] === 0xFF && input[1] === 0xFE) {
+            input = input.slice(2);
+          }
+        }
+        this[kBOMSeen] = true;
+      }
+
+      if (this[kFlags] & CONVERTER_FLAGS_FLUSH) {
+        return this[kHandle].end(input);
+      }
+
+      return this[kHandle].write(input);
+    }
+  }
+
+  return TextDecoder;
+}
+
+// Mix in some shared properties.
+{
+  Object.defineProperties(
+    TextDecoder.prototype,
+    Object.getOwnPropertyDescriptors({
+      get encoding() {
+        validateDecoder(this);
+        return this[kEncoding];
+      },
+
+      get fatal() {
+        validateDecoder(this);
+        return (this[kFlags] & CONVERTER_FLAGS_FATAL) === CONVERTER_FLAGS_FATAL;
+      },
+
+      get ignoreBOM() {
+        validateDecoder(this);
+        return (this[kFlags] & CONVERTER_FLAGS_IGNORE_BOM) ===
+               CONVERTER_FLAGS_IGNORE_BOM;
+      },
+
+      [inspect](depth, opts) {
+        validateDecoder(this);
+        if (typeof depth === 'number' && depth < 0)
+          return this;
+        const ctor = getConstructorOf(this);
+        const obj = Object.create({
+          constructor: ctor === null ? TextDecoder : ctor
+        });
+        obj.encoding = this.encoding;
+        obj.fatal = this.fatal;
+        obj.ignoreBOM = this.ignoreBOM;
+        if (opts.showHidden) {
+          obj[kFlags] = this[kFlags];
+          obj[kHandle] = this[kHandle];
+        }
+        // Lazy to avoid circular dependency
+        return require('internal/util/inspect').inspect(obj, opts);
+      }
+    }));
+  Object.defineProperties(TextDecoder.prototype, {
+    decode: { enumerable: true },
+    [inspect]: { enumerable: false },
+    [Symbol.toStringTag]: {
+      configurable: true,
+      value: 'TextDecoder'
+    }
+  });
+}
+
 module.exports = {
   getEncodingFromLabel,
-  hasTextDecoder,
   TextDecoder,
   TextEncoder
 };

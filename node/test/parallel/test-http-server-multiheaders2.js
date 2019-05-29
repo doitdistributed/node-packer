@@ -47,7 +47,7 @@ const multipleAllowed = [
   // not a special case, just making sure it's parsed correctly
   'X-Forwarded-For',
 
-  // make sure that unspecified headers is treated as multiple
+  // Make sure that unspecified headers is treated as multiple
   'Some-Random-Header',
   'X-Some-Random-Header',
 ];
@@ -65,8 +65,8 @@ const multipleForbidden = [
   'Location',
   'Max-Forwards',
 
-  // special case, tested differently
-  //'Content-Length',
+  // Special case, tested differently
+  // 'Content-Length',
 ];
 
 const srv = http.createServer(function(req, res) {
@@ -80,7 +80,7 @@ const srv = http.createServer(function(req, res) {
                        `header parsed incorrectly: ${header}`);
   });
 
-  res.writeHead(200, {'Content-Type': 'text/plain'});
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('EOF');
 
   srv.close();

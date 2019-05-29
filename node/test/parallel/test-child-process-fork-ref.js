@@ -27,7 +27,7 @@ const fork = require('child_process').fork;
 if (process.argv[2] === 'child') {
   process.send('1');
 
-  // check that child don't instantly die
+  // Check that child don't instantly die
   setTimeout(function() {
     process.send('2');
   }, 200);
@@ -37,7 +37,7 @@ if (process.argv[2] === 'child') {
   });
 
 } else {
-  const child = fork(__filename, ['child'], {silent: true});
+  const child = fork(__filename, ['child'], { silent: true });
 
   const ipc = [];
   let stdout = '';

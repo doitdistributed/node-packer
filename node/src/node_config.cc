@@ -1,21 +1,17 @@
+#include "env-inl.h"
 #include "node.h"
 #include "node_i18n.h"
-#include "env.h"
-#include "env-inl.h"
-#include "util.h"
+#include "node_native_module_env.h"
+#include "node_options.h"
 #include "util-inl.h"
-#include "node_debug_options.h"
-
 
 namespace node {
 
-using v8::Boolean;
 using v8::Context;
-using v8::Integer;
+using v8::Isolate;
 using v8::Local;
+using v8::Number;
 using v8::Object;
-using v8::ReadOnly;
-using v8::String;
 using v8::Value;
 
 // The config binding is used to provide an internal view of compile or runtime
@@ -23,73 +19,72 @@ using v8::Value;
 // alternative to dropping additional properties onto the process object as
 // has been the practice previously in node.cc.
 
-#define READONLY_BOOLEAN_PROPERTY(str)                                        \
-  do {                                                                        \
-    target->DefineOwnProperty(env->context(),                                 \
-                              OneByteString(env->isolate(), str),             \
-                              True(env->isolate()), ReadOnly).FromJust();     \
-  } while (0)
-
-static void InitConfig(Local<Object> target,
+static void Initialize(Local<Object> target,
                        Local<Value> unused,
-                       Local<Context> context) {
+                       Local<Context> context,
+                       void* priv) {
   Environment* env = Environment::GetCurrent(context);
+  Isolate* isolate = env->isolate();
+
+#if defined(DEBUG) && DEBUG
+  READONLY_TRUE_PROPERTY(target, "isDebugBuild");
+#else
+  READONLY_FALSE_PROPERTY(target, "isDebugBuild");
+#endif  // defined(DEBUG) && DEBUG
+
+#if HAVE_OPENSSL
+  READONLY_TRUE_PROPERTY(target, "hasOpenSSL");
+#else
+  READONLY_FALSE_PROPERTY(target, "hasOpenSSL");
+#endif  // HAVE_OPENSSL
+
+#ifdef NODE_FIPS_MODE
+  READONLY_TRUE_PROPERTY(target, "fipsMode");
+#endif
+
 #ifdef NODE_HAVE_I18N_SUPPORT
 
-  READONLY_BOOLEAN_PROPERTY("hasIntl");
+  READONLY_TRUE_PROPERTY(target, "hasIntl");
 
 #ifdef NODE_HAVE_SMALL_ICU
-  READONLY_BOOLEAN_PROPERTY("hasSmallICU");
+  READONLY_TRUE_PROPERTY(target, "hasSmallICU");
 #endif  // NODE_HAVE_SMALL_ICU
 
-  target->DefineOwnProperty(env->context(),
-                            OneByteString(env->isolate(), "icuDataDir"),
-                            OneByteString(env->isolate(), icu_data_dir.data()))
-      .FromJust();
+#if NODE_USE_V8_PLATFORM
+  READONLY_TRUE_PROPERTY(target, "hasTracing");
+#endif
+
+#if !defined(NODE_WITHOUT_NODE_OPTIONS)
+  READONLY_TRUE_PROPERTY(target, "hasNodeOptions");
+#endif
 
 #endif  // NODE_HAVE_I18N_SUPPORT
 
-  if (config_preserve_symlinks)
-    READONLY_BOOLEAN_PROPERTY("preserveSymlinks");
+#if HAVE_INSPECTOR
+  READONLY_TRUE_PROPERTY(target, "hasInspector");
+#else
+  READONLY_FALSE_PROPERTY(target, "hasInspector");
+#endif
 
-  if (config_pending_deprecation)
-    READONLY_BOOLEAN_PROPERTY("pendingDeprecation");
+// configure --no-browser-globals
+#ifdef NODE_NO_BROWSER_GLOBALS
+  READONLY_TRUE_PROPERTY(target, "noBrowserGlobals");
+#else
+  READONLY_FALSE_PROPERTY(target, "noBrowserGlobals");
+#endif  // NODE_NO_BROWSER_GLOBALS
 
-  if (!config_warning_file.empty()) {
-    Local<String> name = OneByteString(env->isolate(), "warningFile");
-    Local<String> value = String::NewFromUtf8(env->isolate(),
-                                              config_warning_file.data(),
-                                              v8::NewStringType::kNormal,
-                                              config_warning_file.size())
-                                                .ToLocalChecked();
-    target->DefineOwnProperty(env->context(), name, value).FromJust();
-  }
+  READONLY_PROPERTY(target,
+                    "bits",
+                    Number::New(isolate, 8 * sizeof(intptr_t)));
 
-  Local<Object> debugOptions = Object::New(env->isolate());
+#if defined HAVE_DTRACE || defined HAVE_ETW
+  READONLY_TRUE_PROPERTY(target, "hasDtrace");
+#endif
 
-  target->DefineOwnProperty(env->context(),
-                            OneByteString(env->isolate(), "debugOptions"),
-                            debugOptions).FromJust();
-
-  debugOptions->DefineOwnProperty(env->context(),
-                            OneByteString(env->isolate(), "host"),
-                            String::NewFromUtf8(env->isolate(),
-                            debug_options.host_name().c_str())).FromJust();
-
-  debugOptions->DefineOwnProperty(env->context(),
-                            OneByteString(env->isolate(), "port"),
-                            Integer::New(env->isolate(),
-                            debug_options.port())).FromJust();
-
-  debugOptions->DefineOwnProperty(env->context(),
-                            OneByteString(env->isolate(), "inspectorEnabled"),
-                            Boolean::New(env->isolate(),
-                            debug_options.inspector_enabled())).FromJust();
-
-  if (config_expose_internals)
-    READONLY_BOOLEAN_PROPERTY("exposeInternals");
+  READONLY_PROPERTY(target, "hasCachedBuiltins",
+     v8::Boolean::New(isolate, native_module::has_code_cache));
 }  // InitConfig
 
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(config, node::InitConfig)
+NODE_MODULE_CONTEXT_AWARE_INTERNAL(config, node::Initialize)

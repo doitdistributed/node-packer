@@ -1,11 +1,11 @@
 'use strict';
-// test unzipping a gzip file that has trailing garbage
+// Test unzipping a gzip file that has trailing garbage
 
 const common = require('../common');
 const assert = require('assert');
 const zlib = require('zlib');
 
-// should ignore trailing null-bytes
+// Should ignore trailing null-bytes
 let data = Buffer.concat([
   zlib.gzipSync('abc'),
   zlib.gzipSync('def'),
@@ -19,11 +19,11 @@ zlib.gunzip(data, common.mustCall((err, result) => {
   assert.strictEqual(
     result.toString(),
     'abcdef',
-    'result should match original string'
+    `result '${result.toString()}' should match original string`
   );
 }));
 
-// if the trailing garbage happens to look like a gzip header, it should
+// If the trailing garbage happens to look like a gzip header, it should
 // throw an error.
 data = Buffer.concat([
   zlib.gzipSync('abc'),
@@ -38,9 +38,11 @@ assert.throws(
 );
 
 zlib.gunzip(data, common.mustCall((err, result) => {
-  assert(err instanceof Error);
-  assert.strictEqual(err.code, 'Z_DATA_ERROR');
-  assert.strictEqual(err.message, 'unknown compression method');
+  common.expectsError({
+    code: 'Z_DATA_ERROR',
+    type: Error,
+    message: 'unknown compression method'
+  })(err);
   assert.strictEqual(result, undefined);
 }));
 

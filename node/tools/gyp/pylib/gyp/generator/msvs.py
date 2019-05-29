@@ -306,9 +306,19 @@ def _ConfigWindowsTargetPlatformVersion(config_data, version):
         continue
       version = MSVSVersion._RegistryGetValue(key % ver, 'ProductVersion') or ''
       # Find a matching entry in sdk_dir\include.
-      names = sorted([x for x in os.listdir(r'%s\include' % sdk_dir)
+      expected_sdk_dir=r'%s\include' % sdk_dir
+      names = sorted([x for x in (os.listdir(expected_sdk_dir)
+                                  if os.path.isdir(expected_sdk_dir)
+                                  else []
+                                  )
                       if x.startswith(version)], reverse=True)
-      return names[0]
+      if names:
+        return names[0]
+      else:
+        print >> sys.stdout, (
+          'Warning: No include files found for '
+          'detected Windows SDK version %s' % (version)
+        )
 
 
 def _BuildCommandLineForRuleRaw(spec, cmd, cygwin_shell, has_input_path,
@@ -1717,14 +1727,17 @@ def _GetCopies(spec):
         src_bare = src[:-1]
         base_dir = posixpath.split(src_bare)[0]
         outer_dir = posixpath.split(src_bare)[1]
-        cmd = 'cd "%s" && xcopy /e /f /y "%s" "%s\\%s\\"' % (
-            _FixPath(base_dir), outer_dir, _FixPath(dst), outer_dir)
+        fixed_dst = _FixPath(dst)
+        full_dst = '"%s\\%s\\"' % (fixed_dst, outer_dir)
+        cmd = 'mkdir %s 2>nul & cd "%s" && xcopy /e /f /y "%s" %s' % (
+            full_dst, _FixPath(base_dir), outer_dir, full_dst)
         copies.append(([src], ['dummy_copies', dst], cmd,
-                       'Copying %s to %s' % (src, dst)))
+                       'Copying %s to %s' % (src, fixed_dst)))
       else:
+        fix_dst = _FixPath(cpy['destination'])
         cmd = 'mkdir "%s" 2>nul & set ERRORLEVEL=0 & copy /Y "%s" "%s"' % (
-            _FixPath(cpy['destination']), _FixPath(src), _FixPath(dst))
-        copies.append(([src], [dst], cmd, 'Copying %s to %s' % (src, dst)))
+            fix_dst, _FixPath(src), _FixPath(dst))
+        copies.append(([src], [dst], cmd, 'Copying %s to %s' % (src, fix_dst)))
   return copies
 
 
@@ -2063,7 +2076,8 @@ def GenerateOutput(target_list, target_dicts, data, params):
 
 
 def _GenerateMSBuildFiltersFile(filters_path, source_files,
-                                rule_dependencies, extension_to_rule_name):
+                                rule_dependencies, extension_to_rule_name,
+                                platforms):
   """Generate the filters file.
 
   This file is used by Visual Studio to organize the presentation of source
@@ -2077,7 +2091,8 @@ def _GenerateMSBuildFiltersFile(filters_path, source_files,
   filter_group = []
   source_group = []
   _AppendFiltersForMSBuild('', source_files, rule_dependencies,
-                           extension_to_rule_name, filter_group, source_group)
+                           extension_to_rule_name, platforms,
+                           filter_group, source_group)
   if filter_group:
     content = ['Project',
                {'ToolsVersion': '4.0',
@@ -2093,7 +2108,7 @@ def _GenerateMSBuildFiltersFile(filters_path, source_files,
 
 
 def _AppendFiltersForMSBuild(parent_filter_name, sources, rule_dependencies,
-                             extension_to_rule_name,
+                             extension_to_rule_name, platforms,
                              filter_group, source_group):
   """Creates the list of filters and sources to be added in the filter file.
 
@@ -2119,11 +2134,12 @@ def _AppendFiltersForMSBuild(parent_filter_name, sources, rule_dependencies,
       # Recurse and add its dependents.
       _AppendFiltersForMSBuild(filter_name, source.contents,
                                rule_dependencies, extension_to_rule_name,
-                               filter_group, source_group)
+                               platforms, filter_group, source_group)
     else:
       # It's a source.  Create a source entry.
       _, element = _MapFileToMsBuildSourceType(source, rule_dependencies,
-                                               extension_to_rule_name)
+                                               extension_to_rule_name,
+                                               platforms)
       source_entry = [element, {'Include': source}]
       # Specify the filter it is part of, if any.
       if parent_filter_name:
@@ -2132,7 +2148,7 @@ def _AppendFiltersForMSBuild(parent_filter_name, sources, rule_dependencies,
 
 
 def _MapFileToMsBuildSourceType(source, rule_dependencies,
-                                extension_to_rule_name):
+                                extension_to_rule_name, platforms):
   """Returns the group and element type of the source file.
 
   Arguments:
@@ -2143,6 +2159,7 @@ def _MapFileToMsBuildSourceType(source, rule_dependencies,
       A pair of (group this file should be part of, the label of element)
   """
   _, ext = os.path.splitext(source)
+  ext = ext.lower()
   if ext in extension_to_rule_name:
     group = 'rule'
     element = extension_to_rule_name[ext]
@@ -2155,9 +2172,12 @@ def _MapFileToMsBuildSourceType(source, rule_dependencies,
   elif ext == '.rc':
     group = 'resource'
     element = 'ResourceCompile'
-  elif ext == '.asm':
+  elif ext in ['.s', '.asm']:
     group = 'masm'
     element = 'MASM'
+    for platform in platforms:
+      if platform.lower() in ['arm', 'arm64']:
+        element = 'MARMASM'
   elif ext == '.idl':
     group = 'midl'
     element = 'Midl'
@@ -2718,7 +2738,7 @@ def _GetMSBuildGlobalProperties(spec, version, guid, gyp_file_name):
     properties[0].append(['WindowsTargetPlatformVersion',
                           str(msvs_windows_sdk_version)])
   elif version.compatible_sdks:
-    raise GypError('%s requires any SDK of %o version, but non were found' %
+    raise GypError('%s requires any SDK of %s version, but none were found' %
                    (version.description, version.compatible_sdks))
 
   if platform_name == 'ARM':
@@ -3261,7 +3281,8 @@ def _AddSources2(spec, sources, exclusions, grouped_sources,
                 detail.append(['ForcedIncludeFiles', ''])
 
         group, element = _MapFileToMsBuildSourceType(source, rule_dependencies,
-                                                     extension_to_rule_name)
+                                                     extension_to_rule_name,
+                                                     _GetUniquePlatforms(spec))
         grouped_sources[group].append([element, {'Include': source}] + detail)
 
 
@@ -3344,7 +3365,7 @@ def _GenerateMSBuildProject(project, options, version, generator_flags):
 
   _GenerateMSBuildFiltersFile(project.path + '.filters', sources,
                               rule_dependencies,
-                              extension_to_rule_name)
+                              extension_to_rule_name, _GetUniquePlatforms(spec))
   missing_sources = _VerifySourcesExist(sources, project_dir)
 
   for configuration in configurations.itervalues():
@@ -3364,6 +3385,12 @@ def _GenerateMSBuildProject(project, options, version, generator_flags):
   import_masm_targets_section = [
       ['Import',
         {'Project': r'$(VCTargetsPath)\BuildCustomizations\masm.targets'}]]
+  import_marmasm_props_section = [
+      ['Import',
+        {'Project': r'$(VCTargetsPath)\BuildCustomizations\marmasm.props'}]]
+  import_marmasm_targets_section = [
+      ['Import',
+        {'Project': r'$(VCTargetsPath)\BuildCustomizations\marmasm.targets'}]]
   macro_section = [['PropertyGroup', {'Label': 'UserMacros'}]]
 
   content = [
@@ -3384,6 +3411,7 @@ def _GenerateMSBuildProject(project, options, version, generator_flags):
    content += _GetMSBuildLocalProperties(project.msbuild_toolset)
   content += import_cpp_props_section
   content += import_masm_props_section
+  content += import_marmasm_props_section
   content += _GetMSBuildExtensions(props_files_of_rules)
   content += _GetMSBuildPropertySheets(configurations)
   content += macro_section
@@ -3396,6 +3424,7 @@ def _GenerateMSBuildProject(project, options, version, generator_flags):
   content += _GetMSBuildProjectReferences(project)
   content += import_cpp_targets_section
   content += import_masm_targets_section
+  content += import_marmasm_targets_section
   content += _GetMSBuildExtensionTargets(targets_files_of_rules)
 
   if spec.get('msvs_external_builder'):

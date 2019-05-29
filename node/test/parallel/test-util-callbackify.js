@@ -6,9 +6,9 @@ const common = require('../common');
 
 const assert = require('assert');
 const { callbackify } = require('util');
-const { join } = require('path');
 const { execFile } = require('child_process');
-const fixtureDir = join(common.fixturesDir, 'uncaught-exceptions');
+const fixtures = require('../common/fixtures');
+
 const values = [
   'hello world',
   null,
@@ -28,7 +28,7 @@ const values = [
   for (const value of values) {
     // Test and `async function`
     async function asyncFn() {
-      return await Promise.resolve(value);
+      return value;
     }
 
     const cbAsyncFn = callbackify(asyncFn);
@@ -70,10 +70,12 @@ const values = [
   for (const value of values) {
     // Test an `async function`
     async function asyncFn() {
-      return await Promise.reject(value);
+      return Promise.reject(value);
     }
 
     const cbAsyncFn = callbackify(asyncFn);
+    assert.strictEqual(cbAsyncFn.length, 1);
+    assert.strictEqual(cbAsyncFn.name, 'asyncFnCallbackified');
     cbAsyncFn(common.mustCall((err, ret) => {
       assert.strictEqual(ret, undefined);
       if (err instanceof Error) {
@@ -89,12 +91,20 @@ const values = [
       }
     }));
 
-    // test a Promise factory
+    // Test a Promise factory
     function promiseFn() {
       return Promise.reject(value);
     }
+    const obj = {};
+    Object.defineProperty(promiseFn, 'name', {
+      value: obj,
+      writable: false,
+      enumerable: false,
+      configurable: true
+    });
 
     const cbPromiseFn = callbackify(promiseFn);
+    assert.strictEqual(promiseFn.name, obj);
     cbPromiseFn(common.mustCall((err, ret) => {
       assert.strictEqual(ret, undefined);
       if (err instanceof Error) {
@@ -142,10 +152,16 @@ const values = [
   for (const value of values) {
     async function asyncFn(arg) {
       assert.strictEqual(arg, value);
-      return await Promise.resolve(arg);
+      return arg;
     }
 
     const cbAsyncFn = callbackify(asyncFn);
+    assert.strictEqual(cbAsyncFn.length, 2);
+    assert.notStrictEqual(
+      Object.getPrototypeOf(cbAsyncFn),
+      Object.getPrototypeOf(asyncFn)
+    );
+    assert.strictEqual(Object.getPrototypeOf(cbAsyncFn), Function.prototype);
     cbAsyncFn(value, common.mustCall((err, ret) => {
       assert.ifError(err);
       assert.strictEqual(ret, value);
@@ -155,8 +171,16 @@ const values = [
       assert.strictEqual(arg, value);
       return Promise.resolve(arg);
     }
+    const obj = {};
+    Object.defineProperty(promiseFn, 'length', {
+      value: obj,
+      writable: false,
+      enumerable: false,
+      configurable: true
+    });
 
     const cbPromiseFn = callbackify(promiseFn);
+    assert.strictEqual(promiseFn.length, obj);
     cbPromiseFn(value, common.mustCall((err, ret) => {
       assert.ifError(err);
       assert.strictEqual(ret, value);
@@ -183,7 +207,7 @@ const values = [
     const iAmThat = {
       async fn(arg) {
         assert.strictEqual(this, iAmThat);
-        return await Promise.resolve(arg);
+        return arg;
       },
     };
     iAmThat.cbFn = callbackify(iAmThat.fn);
@@ -197,7 +221,7 @@ const values = [
 
 {
   // Test that callback that throws emits an `uncaughtException` event
-  const fixture = join(fixtureDir, 'callbackify1.js');
+  const fixture = fixtures.path('uncaught-exceptions', 'callbackify1.js');
   execFile(
     process.execPath,
     [fixture],
@@ -214,13 +238,15 @@ const values = [
 
 {
   // Test that handled `uncaughtException` works and passes rejection reason
-  const fixture = join(fixtureDir, 'callbackify2.js');
+  const fixture = fixtures.path('uncaught-exceptions', 'callbackify2.js');
   execFile(
     process.execPath,
     [fixture],
     common.mustCall((err, stdout, stderr) => {
       assert.ifError(err);
-      assert.strictEqual(stdout.trim(), fixture);
+      assert.strictEqual(
+        stdout.trim(),
+        `ifError got unwanted exception: ${fixture}`);
       assert.strictEqual(stderr, '');
     })
   );
@@ -229,19 +255,20 @@ const values = [
 {
   // Verify that non-function inputs throw.
   ['foo', null, undefined, false, 0, {}, Symbol(), []].forEach((value) => {
-    assert.throws(() => {
+    common.expectsError(() => {
       callbackify(value);
-    }, common.expectsError({
+    }, {
       code: 'ERR_INVALID_ARG_TYPE',
       type: TypeError,
-      message: 'The "original" argument must be of type function'
-    }));
+      message: 'The "original" argument must be of type Function. ' +
+               `Received type ${typeof value}`
+    });
   });
 }
 
 {
   async function asyncFn() {
-    return await Promise.resolve(42);
+    return 42;
   }
 
   const cb = callbackify(asyncFn);
@@ -250,12 +277,13 @@ const values = [
   // Verify that the last argument to the callbackified function is a function.
   ['foo', null, undefined, false, 0, {}, Symbol(), []].forEach((value) => {
     args.push(value);
-    assert.throws(() => {
+    common.expectsError(() => {
       cb(...args);
-    }, common.expectsError({
+    }, {
       code: 'ERR_INVALID_ARG_TYPE',
       type: TypeError,
-      message: 'The "last argument" argument must be of type function'
-    }));
+      message: 'The last argument must be of type Function. ' +
+               `Received type ${typeof value}`
+    });
   });
 }

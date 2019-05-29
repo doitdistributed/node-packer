@@ -23,7 +23,7 @@ if (process.argv[2] === 'child') {
     // server.connections should start as 0
     assert.strictEqual(server.connections, 0);
     server.on('connection', (socket) => {
-      child.send({what: 'socket'}, socket);
+      child.send({ what: 'socket' }, socket);
     });
     server.on('close', () => {
       child.kill();
@@ -33,10 +33,12 @@ if (process.argv[2] === 'child') {
       const connect = net.connect(server.address().port);
 
       connect.on('close', common.mustCall(() => {
-        // now server.connections should be null
+        // `server.connections` should now be null.
         assert.strictEqual(server.connections, null);
         server.close();
       }));
+
+      connect.resume();
     }));
   });
 

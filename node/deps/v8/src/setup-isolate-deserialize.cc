@@ -12,15 +12,15 @@
 namespace v8 {
 namespace internal {
 
-void SetupIsolateDelegate::SetupBuiltins(Isolate* isolate,
-                                         bool create_heap_objects) {
-  DCHECK(!create_heap_objects);
+void SetupIsolateDelegate::SetupBuiltins(Isolate* isolate) {
+  CHECK(!create_heap_objects_);
   // No actual work to be done; builtins will be deserialized from the snapshot.
 }
 
-void SetupIsolateDelegate::SetupInterpreter(
-    interpreter::Interpreter* interpreter, bool create_heap_objects) {
-  DCHECK(interpreter->IsDispatchTableInitialized());
+bool SetupIsolateDelegate::SetupHeap(Heap* heap) {
+  CHECK(!create_heap_objects_);
+  // No actual work to be done; heap will be deserialized from the snapshot.
+  return true;
 }
 
 }  // namespace internal

@@ -22,15 +22,22 @@
 #ifndef SRC_NODE_VERSION_H_
 #define SRC_NODE_VERSION_H_
 
-#define NODE_MAJOR_VERSION 8
+#define NODE_MAJOR_VERSION 12
 #define NODE_MINOR_VERSION 3
-#define NODE_PATCH_VERSION 0
+#define NODE_PATCH_VERSION 1
+
+#define NODE_VERSION_IS_LTS 0
+#define NODE_VERSION_LTS_CODENAME ""
 
 #define NODE_VERSION_IS_RELEASE 1
 
 #ifndef NODE_STRINGIFY
 #define NODE_STRINGIFY(n) NODE_STRINGIFY_HELPER(n)
 #define NODE_STRINGIFY_HELPER(n) #n
+#endif
+
+#ifndef NODE_RELEASE
+#define NODE_RELEASE "node"
 #endif
 
 #ifndef NODE_TAG
@@ -68,11 +75,23 @@
  * Node.js will refuse to load modules that weren't compiled against its own
  * module ABI number, exposed as the process.versions.modules property.
  *
- * When this version number is changed, node.js will refuse
- * to load older modules.  This should be done whenever
- * an API is broken in the C++ side, including in v8 or
- * other dependencies.
+ * Node.js will refuse to load modules with a non-matching ABI version. The
+ * version number here should be changed whenever an ABI-incompatible API change
+ * is made in the C++ side, including in V8 or other dependencies.
+ *
+ * Node.js will not change the module version during a Major release line
+ * We will, at times update the version of V8 shipped in the release line
+ * if it can be made ABI compatible with the previous version.
+ *
+ * The registry of used NODE_MODULE_VERSION numbers is located at
+ *   https://github.com/nodejs/node/blob/master/doc/abi_version_registry.json
+ * Extenders, embedders and other consumers of Node.js that require ABI
+ * version matching should open a pull request to reserve a number in this
+ * registry.
  */
-#define NODE_MODULE_VERSION 57 /* Node.js v8.0.0 */
+#define NODE_MODULE_VERSION 72
+
+// the NAPI_VERSION provided by this version of the runtime
+#define NAPI_VERSION  4
 
 #endif  // SRC_NODE_VERSION_H_

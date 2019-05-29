@@ -20,7 +20,8 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 'use strict';
-require('../common');
+const common = require('../common');
+const assert = require('assert');
 
 /*
  * This test makes sure that non-integer timer delays do not make the process
@@ -39,13 +40,45 @@ require('../common');
  */
 
 const TIMEOUT_DELAY = 1.1;
-const NB_TIMEOUTS_FIRED = 50;
+let N = 50;
 
-let nbTimeoutFired = 0;
-const interval = setInterval(function() {
-  ++nbTimeoutFired;
-  if (nbTimeoutFired === NB_TIMEOUTS_FIRED) {
+const interval = setInterval(common.mustCall(() => {
+  if (--N === 0) {
     clearInterval(interval);
     process.exit(0);
   }
-}, TIMEOUT_DELAY);
+}, N), TIMEOUT_DELAY);
+
+// Test non-integer delay ordering
+{
+  const ordering = [];
+
+  setTimeout(common.mustCall(() => {
+    ordering.push(1);
+  }), 1);
+
+  setTimeout(common.mustCall(() => {
+    ordering.push(2);
+  }), 1.8);
+
+  setTimeout(common.mustCall(() => {
+    ordering.push(3);
+  }), 1.1);
+
+  setTimeout(common.mustCall(() => {
+    ordering.push(4);
+  }), 1);
+
+  setTimeout(common.mustCall(() => {
+    const expected = [1, 2, 3, 4];
+
+    assert.deepStrictEqual(
+      ordering,
+      expected,
+      `Non-integer delay ordering should be ${expected}, but got ${ordering}`
+    );
+
+    // 2 should always be last of these delays due to ordering guarentees by
+    // the implementation.
+  }), 2);
+}
